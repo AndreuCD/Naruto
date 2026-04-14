@@ -84,15 +84,15 @@ body{background:var(--dk);font-family:'Teko',sans-serif;color:#fff;overflow:hidd
   </div>
   <div class="lp">
     <h2>Online (PeerJS)</h2>
-    <button class="btn" onclick="goCharSel('host')">CREATE ROOM (Host)</button>
+    <button class="btn" id="hostbtn" onclick="hostGame()">CREATE ROOM (Host)</button>
     <div id="hs" style="display:none;flex-direction:column;gap:8px">
-      <div style="font-size:.82em;color:#555">Tu ID:</div>
+      <div style="font-size:.82em;color:#555">Tu ID — comparte con rival:</div>
       <div id="pid" onclick="copyId()" title="Clic copiar">Generando...</div>
       <div id="lstatus">Esperando rival...</div>
     </div>
     <div class="divider">o</div>
     <input id="jid" class="inp" placeholder="ID del host"/>
-    <button class="btn sec" onclick="goCharSel('client')">JOIN</button>
+    <button class="btn sec" onclick="joinGame()">JOIN</button>
     <div id="jstatus"></div>
   </div>
 </div>
@@ -174,20 +174,14 @@ const CHAR_KEYS=Object.keys(CHARS);
 let selMode=null,selP1='mark',selP2='omni',selReady=[false,false],remoteCharReady=false;
 
 function goCharSel(m){
-  selMode=m;selP1='mark';selP2='omni';selReady=[false,false];remoteCharReady=false;
+  selMode=m;
   document.getElementById('lobby').style.display='none';
+  document.getElementById('hs').style.display='none';
   document.getElementById('charsel').style.display='flex';
   document.getElementById('cs2panel').style.display=(m==='local')?'flex':'none';
   document.getElementById('cs-start').style.display='none';
   buildCards();
-  if(m==='host')setupHost();
-  else if(m==='client'){
-    const hid=document.getElementById('jid').value.trim();
-    if(!hid){document.getElementById('jstatus').textContent='Necesitas ID';document.getElementById('charsel').style.display='none';document.getElementById('lobby').style.display='flex';return;}
-    setupClient(hid);
-  }
 }
-
 function buildCards(){
   ['cs1','cs2'].forEach((id,pi)=>{
     const el=document.getElementById(id);el.innerHTML='';
@@ -552,15 +546,38 @@ function loop(ts){
   raf=requestAnimationFrame(loop);
 }
 
+function hostGame(){
+  selMode='host';selP1='mark';selP2='omni';selReady=[false,false];remoteCharReady=false;
+  document.getElementById('hostbtn').style.display='none';
+  document.getElementById('hs').style.display='flex';
+  setupHost();
+}
+function joinGame(){
+  const hid=document.getElementById('jid').value.trim();
+  if(!hid){document.getElementById('jstatus').textContent='Necesitas ID';return;}
+  selMode='client';selP1='mark';selP2='omni';selReady=[false,false];remoteCharReady=false;
+  document.getElementById('jstatus').textContent='Conectando...';
+  setupClient(hid);
+}
 function setupHost(){
   peer=new Peer(undefined,{debug:0});
-  peer.on('open',id=>{document.getElementById('pid').textContent=id;document.getElementById('hs').style.display='flex';setNS('HOST',false);});
-  peer.on('connection',c=>{conn=c;conn.on('open',()=>{setNS('ONLINE',true);myIdx=0;mode='host';});conn.on('data',onData);conn.on('close',()=>setNS('DISC',false));});
+  peer.on('open',id=>{document.getElementById('pid').textContent=id;setNS('HOST',false);});
+  peer.on('connection',c=>{
+    conn=c;
+    conn.on('open',()=>{setNS('ONLINE',true);myIdx=0;mode='host';goCharSel('host');});
+    conn.on('data',onData);
+    conn.on('close',()=>setNS('DISC',false));
+  });
   peer.on('error',e=>document.getElementById('lstatus').textContent='Error: '+e.type);
 }
 function setupClient(hid){
   peer=new Peer(undefined,{debug:0});
-  peer.on('open',()=>{document.getElementById('jstatus').textContent='Conectando...';conn=peer.connect(hid,{reliable:true});conn.on('open',()=>{setNS('ONLINE',true);myIdx=1;mode='client';});conn.on('data',onData);conn.on('close',()=>setNS('DISC',false));});
+  peer.on('open',()=>{
+    conn=peer.connect(hid,{reliable:true});
+    conn.on('open',()=>{setNS('ONLINE',true);myIdx=1;mode='client';goCharSel('client');});
+    conn.on('data',onData);
+    conn.on('close',()=>setNS('DISC',false));
+  });
   peer.on('error',e=>document.getElementById('jstatus').textContent='Error: '+e.type);
 }
 function startPingLoop(){setInterval(()=>{if(conn&&mode!=='local'){pingTs=Date.now();netSend({t:'ping'});}},3000);}
@@ -576,7 +593,7 @@ function startGame(ct1,ct2){
 function resetLobby(){
   gameOn=false;if(raf)cancelAnimationFrame(raf);
   ['ov','gw','charsel'].forEach(id=>document.getElementById(id).style.display='none');
-  document.getElementById('lobby').style.display='flex';document.getElementById('hs').style.display='none';
+  document.getElementById('lobby').style.display='flex';document.getElementById('hs').style.display='none';document.getElementById('hostbtn').style.display='';
   document.getElementById('jid').value='';document.getElementById('jstatus').textContent='';
   document.getElementById('lstatus').textContent='Esperando rival...';document.getElementById('pid').textContent='Generando...';
   document.getElementById('ping-disp').textContent='';
